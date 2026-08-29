@@ -10,8 +10,11 @@ class Entrega:
 
         self.channel.exchange_declare(exchange='ecommerce', exchange_type='direct')
 
-        result = self.channel.queue_declare(queue='', exclusive=True)
+        result = self.channel.queue_declare(queue='consumer_queue', exclusive=True)
         self.consumer_queue = result.method.queue
+
+        result = self.channel.queue_declare(queue='producer_queue', exclusive=True)
+        self.producer_queue = result.method.queue
 
         self.channel.queue_bind(exchange='ecommerce', queue=self.consumer_queue,
                    routing_key="pagamento.aprovado")
