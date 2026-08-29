@@ -17,7 +17,7 @@ class Ads:
         self.channel.exchange_declare(exchange='promocoes', exchange_type='topic')
 
         random.seed(time.time())
-        self.categories = ["juice", "food", "alcohool"]
+        self.categories = ["A", "B", "C"]
 
     def start_promoting(self):
         
@@ -35,17 +35,17 @@ class Ads:
 
         message = "Could not generate a promotion"
 
-        if category == "juice":
+        if category == "A":
             juices = ["Orange juice 20%% off", "Apple juice 15%% off", "Grape juice 10%% off"]
             promotion_index = random.randint(0, len(juices) - 1)
             message = juices[promotion_index]
 
-        elif category == "food":
+        elif category == "B":
             foods = ["Arayes 15%% off", "Feijoada 40%% off", "Oniguiri 10%% off", "Lamen 20%% off"]
             promotion_index = random.randint(0, len(foods) - 1)
             message = foods[promotion_index]
 
-        elif category == "alcohool":
+        elif category == "C":
             drinks = ["Rum 5%% off", "Vodka 15%% off"]
             promotion_index = random.randint(0, len(drinks) - 1)
             message = drinks[promotion_index]
