@@ -6,6 +6,10 @@ import sys
 import time
 import random
 
+from Crypto.Signature import pkcs1_15
+from Crypto.Hash import SHA256
+from Crypto.PublicKey import RSA
+
 class Ads:
 
     def __init__(self):
@@ -49,6 +53,12 @@ class Ads:
             drinks = ["Rum 5%% off", "Vodka 15%% off"]
             promotion_index = random.randint(0, len(drinks) - 1)
             message = drinks[promotion_index]
+
+        
+
+        key = RSA.import_key(open('private_key.der').read())
+        h = SHA256.new(message)
+        signature = pkcs1_15.new(key).sign(h)
 
         routing_key = f"promocao.categoria.{category}"
         self.channel.basic_publish(
