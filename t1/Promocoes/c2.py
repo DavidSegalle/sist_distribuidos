@@ -2,10 +2,13 @@
 import pika
 import sys
 import json
+from generate_keys import KeyManager
 
 class C1:
 
     def __init__(self):
+
+        self.key_manager = KeyManager()
 
         self.connection = pika.BlockingConnection(
             pika.ConnectionParameters(host='localhost'))
@@ -26,7 +29,11 @@ class C1:
 
         def callback(ch, method, properties, body):
             info = json.loads(body)
-            print(f" [x] {method.routing_key}:{info["message"]}")
+            
+            if self.key_manager.check_signature(info["message"], info["signature"], "ads"):
+                print(f" [x] {method.routing_key}:{info["message"]}")
+            else:
+                print("Falsified signature")
 
 
         self.channel.basic_consume(
