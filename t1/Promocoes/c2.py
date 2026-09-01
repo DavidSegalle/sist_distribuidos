@@ -2,7 +2,7 @@
 import pika
 import sys
 import json
-from generate_keys import KeyManager
+from key_manager.generate_keys import KeyManager
 
 class C1:
 
