@@ -6,13 +6,16 @@ import sys
 import time
 import random
 
-from Crypto.Signature import pkcs1_15
-from Crypto.Hash import SHA256
-from Crypto.PublicKey import RSA
+import json
+
+from generate_keys import KeyManager
 
 class Ads:
 
     def __init__(self):
+
+        self.key_manager = KeyManager("ads")
+
         self.connection = pika.BlockingConnection(
             pika.ConnectionParameters(host='localhost'))
 
@@ -26,7 +29,7 @@ class Ads:
     def start_promoting(self):
         
         while True:
-            sl_time = random.randint(5, 10)
+            sl_time = random.randint(3, 7)
             print(f"Waiting {sl_time} seconds until making a new advert")
             time.sleep(sl_time)
             self.ad_maker()
@@ -54,15 +57,12 @@ class Ads:
             promotion_index = random.randint(0, len(drinks) - 1)
             message = drinks[promotion_index]
 
+        signature = self.key_manager.sign(message)
         
-
-        key = RSA.import_key(open('private_key.der').read())
-        h = SHA256.new(message)
-        signature = pkcs1_15.new(key).sign(h)
-
+        signed_message = {"message": message, "signature": signature}
         routing_key = f"promocao.categoria.{category}"
         self.channel.basic_publish(
-                exchange='promocoes', routing_key=routing_key, body=message)
+                exchange='promocoes', routing_key=routing_key, body=json.dumps(signed_message))
 
         print(f" [x] Sent {routing_key}:{message}")
 

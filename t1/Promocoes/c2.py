@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import pika
 import sys
+import json
 
 class C1:
 
@@ -24,7 +25,8 @@ class C1:
 
 
         def callback(ch, method, properties, body):
-            print(f" [x] {method.routing_key}:{body}")
+            info = json.loads(body)
+            print(f" [x] {method.routing_key}:{info["message"]}")
 
 
         self.channel.basic_consume(
