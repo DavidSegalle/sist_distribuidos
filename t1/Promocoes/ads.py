@@ -26,13 +26,22 @@ class Ads:
         random.seed(time.time())
         self.categories = ["A", "B", "C"]
 
-    def start_promoting(self):
+    def promote(self):
         
         while True:
             sl_time = random.randint(3, 7)
             print(f"Waiting {sl_time} seconds until making a new advert")
             time.sleep(sl_time)
-            self.ad_maker()
+            message, category = self.ad_maker()
+
+            signature = self.key_manager.sign(message)
+
+            signed_message = {"message": message, "signature": signature}
+            routing_key = f"promocao.categoria.{category}"
+            self.channel.basic_publish(
+                    exchange='promocoes', routing_key=routing_key, body=json.dumps(signed_message))
+    
+            print(f" [x] Sent {routing_key}:{message}")
 
 
     def ad_maker(self):
@@ -57,15 +66,8 @@ class Ads:
             promotion_index = random.randint(0, len(drinks) - 1)
             message = drinks[promotion_index]
 
-        signature = self.key_manager.sign(message)
-        
-        signed_message = {"message": message, "signature": signature}
-        routing_key = f"promocao.categoria.{category}"
-        self.channel.basic_publish(
-                exchange='promocoes', routing_key=routing_key, body=json.dumps(signed_message))
-
-        print(f" [x] Sent {routing_key}:{message}")
+        return message, category
 
 if __name__ == "__main__":
     promoter = Ads()
-    promoter.start_promoting()
+    promoter.promote()
