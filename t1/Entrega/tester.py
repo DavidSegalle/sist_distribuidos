@@ -1,6 +1,7 @@
 import pika
 import sys
 import json
+import time
 
 from key_manager.generate_keys import KeyManager
 
@@ -28,9 +29,13 @@ class EntregaTest:
 
     def callback(self,ch, method, properties, body):
         print(f" [x] {method.routing_key}:{body}")
-        print(f" Gerando nota...")
-        msg = "Teste"
-        self.publish(msg)
+        info = json.loads(body)
+        time.sleep(2)
+        if self.key_manager.check_signature(info["message"], info["signature"], "entrega"):
+            print(f" [x] The message is real, sending pedido.enviado")
+            self.publish(info["message"] + "1")
+        else:
+            print(" [x] Falsified signature")
     
     def consume(self):
         self.channel.basic_consume(

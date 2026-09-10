@@ -35,18 +35,15 @@ class Entrega:
 
 
     def callback(self,ch, method, properties, body):
-        print(f" [x] {method.routing_key}:{body}")
-        print(f" Gerando nota...")
+        print(f" [x] {method.routing_key} sent a message")
 
         info = json.loads(body)
         
         if self.key_manager.check_signature(info["message"], info["signature"], "pagamento"):
-            print(f" [x] {method.routing_key}:{info["message"]}")
+            print(f" [x] The message is real, sending pedido.enviado")
+            self.publish(info["message"])
         else:
-            print("Falsified signature")
-        msg = "Teste"
-        time.sleep(2)
-        self.publish(msg)
+            print(" [x] Falsified signature")
     
     def consume(self):
         self.channel.basic_consume(
