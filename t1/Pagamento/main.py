@@ -42,7 +42,7 @@ class Pagamento:
             accepted = bool(random.getrandbits(1))
             if accepted:
                 print(" [x] Payment was accepted, sending to: pagamento.aprovado")
-                self.publish("pagamento.aprovado", info["message"])
+                self.publish("pagamento.aprovado", info["id"], info["message"])
             else:
                 print(" [x] Payment failed, sending to: pagamento.reprovado")
                 self.publish("pagamento.reprovado", info["id"], info["message"])
