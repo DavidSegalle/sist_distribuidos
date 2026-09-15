@@ -47,44 +47,46 @@ class Estoque:
 
         info = json.loads(body)
 
-        if self.key_manager.check_signature(info["message"], info["signature"], "principal"):
+        if self.key_manager.check_signature(str(info["id"]) + info["message"], info["signature"], "principal"):
             message = info["message"]
-            print(f" [x] The message is real: {message}")
-            time.sleep(2)
+            id = str(info["id"])
+            print(f" [x] The message is real ({id}): {message}")
 
-            produto = info["message"] #TROCAR DEPOIS
+            produto = info["message"]
             if (self.stock[produto] > 0):
-                print(f"Estoque.ok")
-                self.publish("pedido.estoque_ok", message) #colocar id
+                print(f" [x] pedido.estoque_ok")
+                self.publish("pedido.estoque_ok", id, message)
             else:
-                print(f"Estoque.indisponivel")
-                self.publish("estoque.indisponivel", message) #colocar id
-                 
+                print(f" [x] estoque.indisponivel")
+                self.publish("estoque.indisponivel", id, message)
         else:
             print(" [x] Falsified signature, ignoring")
+        
+        time.sleep(2)
+
 
     def excluido_callback(self, ch, method, properties, body):
         print(f" [x] {method.routing_key} sent a message")
 
         info = json.loads(body)
 
-        if self.key_manager.check_signature(info["message"], info["signature"], "principal"):
+        if self.key_manager.check_signature(str(info["id"]) + info["message"], info["signature"], "principal"):
             message = info["message"]
-            print(f" [x] The message is real: {message}")
-            time.sleep(2)
+            id = str(info["id"])
+            print(f" [x] The message is real ({id}): {message}")
             
             produto = message
             if (self.stock[produto] - 1 >= 0):
                 self.stock[produto] = self.stock[produto] - 1
-                print(f"Estoque.ok")
-                self.publish("pedido.estoque_ok", message) #colocar id  
+                print(f" [x] pedido.estoque_ok")
+                self.publish("pedido.estoque_ok", id, message)
             else:
-                print(f"Estoque.indisponivel")
-                self.publish("estoque.indisponivel", message) #colocar id
-
-
+                print(f" [x] pedido.estoque_indisponivel")
+                self.publish("estoque.indisponivel", id, message)
         else:
             print(" [x] Falsified signature, ignoring")
+
+        time.sleep(2)
 
         
     def consume(self):
@@ -95,10 +97,10 @@ class Estoque:
         print("Started consuming")
         self.channel.start_consuming()
 
-    def publish(self,key, message):
-        signature = self.key_manager.sign(message)
+    def publish(self, key, id, message):
+        signature = self.key_manager.sign(str(id) + message)
         
-        signed_message = {"message": message, "signature": signature}
+        signed_message = {"id": id, "message": message, "signature": signature}
 
         self.channel.basic_publish(
         exchange='ecommerce', routing_key=key, body=json.dumps(signed_message))

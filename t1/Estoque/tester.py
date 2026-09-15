@@ -27,11 +27,11 @@ class EstoqueTest:
         self.channel.queue_bind(exchange='ecommerce', queue=self.estoque_indisponivel_queue,
                            routing_key="estoque.indisponivel")
 
-        self.publish("Feijoada", "pedido.criado")
-        self.publish("Feijoada", "pedido.excluido")
-        self.publish("Feijoada", "pedido.criado")
-        self.publish("Vodka", "pedido.excluido")
-        self.publish("Vodka", "pedido.excluido")
+        self.publish("pedido.criado", 1,"Feijoada")
+        self.publish("pedido.excluido", 2,"Feijoada")
+        self.publish("pedido.criado", 3,"Feijoada")
+        self.publish("pedido.excluido", 4, "Vodka")
+        self.publish("pedido.excluido", 5, "Vodka")
 
 
         self.consume()
@@ -40,9 +40,10 @@ class EstoqueTest:
     def estoque_ok_callback(self,ch, method, properties, body):
         info = json.loads(body)
         time.sleep(2)
-        if self.key_manager.check_signature(info["message"], info["signature"], "estoque"):
-            print(f" [x] The message is real, pedido aprovado, sending another test")
-            print(info["message"])
+        if self.key_manager.check_signature(str(info["id"]) + info["message"], info["signature"], "estoque"):
+            message = info["message"]
+            id = str(info["id"])
+            print(f" [x] The message is real ({id}): {message}")
         else:
             print(" [x] Falsified signature")
 
@@ -50,9 +51,10 @@ class EstoqueTest:
         #print(f" [x] {method.routing_key}:{body}")
         info = json.loads(body)
         time.sleep(2)
-        if self.key_manager.check_signature(info["message"], info["signature"], "estoque"):
-            print(f" [x] The message is real, pedido recusado, sending another test")
-            print(info["message"])
+        if self.key_manager.check_signature(str(info["id"]) + info["message"], info["signature"], "estoque"):
+            message = info["message"]
+            id = str(info["id"])
+            print(f" [x] The message is real ({id}): {message}")
         else:
             print(" [x] Falsified signature")
     
@@ -64,11 +66,10 @@ class EstoqueTest:
         print("Started consuming")
         self.channel.start_consuming()
 
-    def publish(self,message, key):
-
-        signature = self.key_manager.sign(message)
-                
-        signed_message = {"message": message, "signature": signature}
+    def publish(self, key, id, message):
+        signature = self.key_manager.sign(str(id) + message)
+        
+        signed_message = {"id": id, "message": message, "signature": signature}
 
         self.channel.basic_publish(
         exchange='ecommerce', routing_key=key, body=json.dumps(signed_message))
