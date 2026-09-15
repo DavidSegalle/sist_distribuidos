@@ -35,8 +35,8 @@ class Pagamento:
         print(f" [x] {method.routing_key} sent a message")
 
         info = json.loads(body)
-        
-        if self.key_manager.check_signature(info["message"], info["signature"], "estoque"):
+        signed_info = str(info["id"]) + info["message"]
+        if self.key_manager.check_signature(signed_info, info["signature"], "estoque"):
             print(f" [x] The message is real, checking if the payment gets accepted")
 
             accepted = bool(random.getrandbits(1))
@@ -45,7 +45,7 @@ class Pagamento:
                 self.publish("pagamento.aprovado", info["message"])
             else:
                 print(" [x] Payment failed, sending to: pagamento.reprovado")
-                self.publish("pagamento.reprovado", info["message"])
+                self.publish("pagamento.reprovado", info["id"], info["message"])
         else:
             print(" [x] Falsified signature, ignoring")
     
@@ -55,11 +55,11 @@ class Pagamento:
         print("Started consuming")
         self.channel.start_consuming()
 
-    def publish(self, key, message):
+    def publish(self, key, id, message):
         # Message deve possuir as informações do pedido
-        signature = self.key_manager.sign(message)
+        signature = self.key_manager.sign(str(id) + message)
         
-        signed_message = {"message": message, "signature": signature}
+        signed_message = {"id": id, "message": message, "signature": signature}
 
         self.channel.basic_publish(
         exchange='ecommerce', routing_key=key, body=json.dumps(signed_message))

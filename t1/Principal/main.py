@@ -4,6 +4,7 @@ import sys
 from threading import Thread
 import json
 
+
 from key_manager.generate_keys import KeyManager
 
 EXCHANGE = "ecommerce"
@@ -13,6 +14,12 @@ PRODUCTS = [
     "Arayes", "Feijoada", "Oniguiri", "Lamen",
     "Rum", "Vodka"
 ]
+
+class Actions():
+    see_products = 0
+    buy_products = 1
+    see_purchase_status = 2
+    quit = 3
 
 # beverages = ["Orange juice 20%% off", "Apple juice 15%% off", "Grape juice 10%% off"]
 # foods = ["Arayes 15%% off", "Feijoada 40%% off", "Oniguiri 10%% off", "Lamen 20%% off"]
@@ -34,17 +41,19 @@ class Principal:
 
     def terminal_interaction(self):
         while(True):
-
-            print("See products [0]")
-            print("Buy product  [1]")
+            print(Actions.see_products)
+            print(f"[{Actions.see_products}] See products")
+            print(f"[{Actions.buy_products}] Buy product")
+            print(f"[{Actions.see_purchase_status}] See purchases status")
+            print(f"[{Actions.quit}] Quit")
             selection = int(input("Select an option:"))
 
-            if selection == 0:
+            if selection == Actions.see_products:
                 # Fazer algum meio de mostrar os produtos (não está claro se isso pode ser armazenado nessa classe mesmo)
                 for product in PRODUCTS:
                     print(product)
 
-            if selection == 1:
+            if selection == Actions.buy_products:
                 # Dá um publish em pedido.criado e adiciona o pedido a uma lista
                 i = 0
                 for product in PRODUCTS:
@@ -58,7 +67,8 @@ class Principal:
                 if selected < i and selected >= 0:
                     print(F"You chose {PRODUCTS[selected]}, buying the product")
 
-                    self.pedidos.append(PRODUCTS[selected])
+                    pedido = {"status": "sent", "product": PRODUCTS[selected]}
+                    self.pedidos.append(pedido)
 
                     id = len(self.pedidos) - 1
 
@@ -66,9 +76,16 @@ class Principal:
                 else:
                     print("You did not choose a product, returning to menu")
 
+            if selection == Actions.see_purchase_status:
+                print(self.pedidos)
+
             if "cancelar pedido":
                 # Professora disse que não será cobrado no trabalho
                 pass
+
+            if selection == Actions.quit:
+                print("Exiting")
+                break
 
     def publish(self, key, id, message):
         # Message deve possuir as informações do pedido
