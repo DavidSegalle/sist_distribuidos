@@ -51,7 +51,7 @@ class Entrega:
         print("Started consuming")
         self.channel.start_consuming()
 
-    def publish(self,message):
+    def publish(self, message):
         # Message deve possuir as informações do pedido
         signature = self.key_manager.sign(message)
         

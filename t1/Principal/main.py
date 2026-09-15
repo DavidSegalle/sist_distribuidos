@@ -2,26 +2,27 @@
 import pika
 import sys
 from threading import Thread
+import json
+
+from key_manager.generate_keys import KeyManager
 
 EXCHANGE = "ecommerce"
 
-CONSUME_FROM_KEYS = {
-    "pagamento": ["aprovado", "recusado"],
-    "pedido": ["enviado", "estoque_ok"],
-    "estoque": ["indisponivel"]
-}
+PRODUCTS = [
+    "Suco de Laranja", "Suco de Maçã", "Suco de Uva",
+    "Arayes", "Feijoada", "Oniguiri", "Lamen",
+    "Rum", "Vodka"
+]
 
-# CONSUME_FROM_KEYS = [
-# "pagamento.aprovado",
-# "pagamento.recusado",
-# "pedido.enviado",
-# "pedido.estoque_ok",
-# "estoque.indisponivel"
-# ]
+# beverages = ["Orange juice 20%% off", "Apple juice 15%% off", "Grape juice 10%% off"]
+# foods = ["Arayes 15%% off", "Feijoada 40%% off", "Oniguiri 10%% off", "Lamen 20%% off"]
+# drinks = ["Rum 5%% off", "Vodka 15%% off"]
 
 class Principal:
 
     def __init__(self):
+
+        self.key_manager = KeyManager("entrega")
 
         self.connection = pika.BlockingConnection(
             pika.ConnectionParameters(host='localhost'))
@@ -29,66 +30,55 @@ class Principal:
 
         self.channel.exchange_declare(exchange=EXCHANGE, exchange_type='direct')
 
-        self.result = self.channel.queue_declare(queue='', exclusive=True)
-        queue_name = self.result.method.queue
+        self.pedidos = []
 
-        self.severities = sys.argv[1:]
-        if not self.severities:
-            sys.stderr.write("Usage: %s [info] [warning] [error]\n" % sys.argv[0])
-            sys.exit(1)
-
-        for key in CONSUME_FROM_KEYS.keys():
-            for sub_key in CONSUME_FROM_KEYS[key]:
-                self.channel.queue_bind(
-                    exchange=EXCHANGE, queue=queue_name, routing_key=f"{key}.{sub_key}"
-                )
-
-        self.channel.basic_consume(
-            queue=queue_name, on_message_callback=self.callback, auto_ack=True
-        )
-
-        # Lança a thread para ler o rabbitMQ
-        t = Thread(target = self.process_consume)
-        t.start()
-        # Precisa fazer sistema pra thread morrer quando fechar o app
-
-        self.pedidos = {}
-
-    def terminal_interaction():
+    def terminal_interaction(self):
         while(True):
-            if "tá olhando pedidos":
+
+            print("See products [0]")
+            print("Buy product  [1]")
+            selection = int(input("Select an option:"))
+
+            if selection == 0:
                 # Fazer algum meio de mostrar os produtos (não está claro se isso pode ser armazenado nessa classe mesmo)
-                pass
-            if "realizar pedidos":
+                for product in PRODUCTS:
+                    print(product)
+
+            if selection == 1:
                 # Dá um publish em pedido.criado e adiciona o pedido a uma lista
-                pass
+                i = 0
+                for product in PRODUCTS:
+                    print(f"Select [{i}] for product: {product}")
+                    i += 1
+                print(f"Select [{i}] to cancel")
+
+                selected = int(input("select: "))
+
+                # Caso tenha sido cancelado
+                if selected < i and selected >= 0:
+                    print(F"You chose {PRODUCTS[selected]}, buying the product")
+
+                    self.pedidos.append(PRODUCTS[selected])
+
+                    id = len(self.pedidos) - 1
+
+                    self.publish("pedido.criado", id, PRODUCTS[selected])
+                else:
+                    print("You did not choose a product, returning to menu")
+
             if "cancelar pedido":
-                # Dá um publish em pedido.cancelado e retira ele dá lista
+                # Professora disse que não será cobrado no trabalho
                 pass
 
-    # Saporra tem que ser lançada em uma thread pq start_consuming é blocking e temos que poder enviar pedidos
-    def process_consume(self):
-        self.channel.start_consuming()
+    def publish(self, key, id, message):
+        # Message deve possuir as informações do pedido
+        signature = self.key_manager.sign(str(id) + message)
+        
+        signed_message = {"id": id, "message": message, "signature": signature}
 
-    def callback(self, ch, method, properties, body):
-        print(f" [x] {method.routing_key}:{body}")
+        self.channel.basic_publish(
+        exchange='ecommerce', routing_key=key, body=json.dumps(signed_message))
 
-        if method.routing_key.split(".")[0] == "pagamento":
-            if method.routing_key.split(".")[1] == "aprovado":
-                print("O pagamento foi aprovado")
-            elif method.routing_key.split(".")[1] == "recusado":
-                print("O pagamento foi recusado")
-                # Tirar o pedido da lista de pedidos e publicar em pedido.excluido
-
-        if method.routing_key.split(".")[0] == "estoque":
-            if method.routing_key.split(".")[1] == "indisponivel":
-                print("Não há estoque disponível")
-                # Tirar o pedido da lista de pedidos e publicar em pedido.excluido
-
-            # Estoque ok estava na key pedido., ou seja, talvez aqui seja para que o publisher de pedido envie uma lista de produtos ocasionalmente
-            elif method.routing_key.split(".")[1] == "estoque_ok":
-                print("Há estoque disponível")
-
-        if method.routing_key.split(".")[0] == "pedido":
-                if method.routing_key.split(".")[1] == "enviado":
-                    print("O pedido foi enviado")
+if __name__ == "__main__":
+    a = Principal()
+    a.terminal_interaction()
