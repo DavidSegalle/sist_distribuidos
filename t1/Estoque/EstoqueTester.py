@@ -2,23 +2,11 @@
 import pika
 import sys
 
-class Estoque:
+class EstoqueTester:
     def __init__(self):
         connection = pika.BlockingConnection(
         pika.ConnectionParameters(host='localhost'))
         self.channel = connection.channel()
-
-        self.stock = {
-            "Suco de Laranja": 2,
-            "Suco de Maçã": 4,
-            "Suco de Uva": 5,
-            "Arayes": 3,
-            "Feijoada": 4,
-            "Oniguiri": 1,
-            "Lamen": 3,
-            "Rum": 2,
-            "Vodka": 1,
-        }
 
         self.channel.exchange_declare(exchange='ecommerce', exchange_type='direct')
 
@@ -30,42 +18,32 @@ class Estoque:
         self.channel.queue_bind(exchange='ecommerce', queue=self.consumer_queue,
                    routing_key="pedido.excluido")
 
-        self.consume()
+        #self.consume()
+
+        self.publish("Feijoada", "pedido.criado")
+        self.publish("Feijoada", "pedido.excluido")
+        self.publish("Feijoada", "pedido.criado")
 
 
     def callback(self,ch, method, properties, body):
         print(f" [x] {method.routing_key}:{body}")
         key = method.routing_key
-        body = body.decode("utf-8")
         if (key == "pedido.criado"):
-            print(f"Verificando produto {body}") 
-            print(f"Existem {self.stock[body]} em estoque")
-            
-            if (self.stock[body] > 0):
-                print(f"Estoque.ok")
-            else:
-                print(f"Estoque.indisponivel")
-            
+            print(f"Adicionando produto {body}")
         else:
             #pedido.excluido
             print(f"Excluindo produto {body}")
-            print(f"Existem {self.stock[body]} em estoque")
-            self.stock[body] = self.stock[body] - 1
-
-            if (self.stock[body] > 0):
-                print(f"Estoque.ok")
-            else:
-                print(f"Estoque.indisponivel")
         
+    
     def consume(self):
         self.channel.basic_consume(
         queue=self.consumer_queue, on_message_callback=self.callback, auto_ack=True)
         print("Started consuming")
         self.channel.start_consuming()
 
-    def publish(self,message):
+    def publish(self,message, routing_key):
         self.channel.basic_publish(
-        exchange='ecommerce', routing_key="pagamento.aprovado", body=message)
+        exchange='ecommerce', routing_key=routing_key, body=message)
 
 if __name__ == "__main__":
-    e = Estoque()
+    e = EstoqueTester()
