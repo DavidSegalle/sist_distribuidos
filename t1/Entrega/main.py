@@ -43,7 +43,7 @@ class Entrega:
             print(f" [x] The message is real, sending pedido.enviado")
             self.publish(info["message"])
         else:
-            print(" [x] Falsified signature")
+            print(" [x] Falsified signature, ignoring")
     
     def consume(self):
         self.channel.basic_consume(
@@ -52,7 +52,7 @@ class Entrega:
         self.channel.start_consuming()
 
     def publish(self,message):
-
+        # Message deve possuir as informações do pedido
         signature = self.key_manager.sign(message)
         
         signed_message = {"message": message, "signature": signature}
