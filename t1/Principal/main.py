@@ -67,7 +67,7 @@ class Principal:
                 if selected < i and selected >= 0:
                     print(F"You chose {PRODUCTS[selected]}, buying the product")
 
-                    pedido = {"status": "sent", "product": PRODUCTS[selected]}
+                    pedido = {"status": "requested", "product": PRODUCTS[selected]}
                     self.pedidos.append(pedido)
 
                     id = len(self.pedidos) - 1

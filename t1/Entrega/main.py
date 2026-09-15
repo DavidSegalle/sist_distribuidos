@@ -38,10 +38,10 @@ class Entrega:
         print(f" [x] {method.routing_key} sent a message")
 
         info = json.loads(body)
-        
-        if self.key_manager.check_signature(info["message"], info["signature"], "pagamento"):
+        signed_info = str(info["id"]) + info["message"]
+        if self.key_manager.check_signature(signed_info, info["signature"], "pagamento"):
             print(f" [x] The message is real, sending pedido.enviado")
-            self.publish(info["message"])
+            self.publish(info["id"], info["message"])
         else:
             print(" [x] Falsified signature, ignoring")
     
@@ -51,11 +51,11 @@ class Entrega:
         print("Started consuming")
         self.channel.start_consuming()
 
-    def publish(self, message):
+    def publish(self, id, message):
         # Message deve possuir as informações do pedido
         signature = self.key_manager.sign(message)
         
-        signed_message = {"message": message, "signature": signature}
+        signed_message = {"id": id, "message": message, "signature": signature}
 
         self.channel.basic_publish(
         exchange='ecommerce', routing_key="pedido.enviado", body=json.dumps(signed_message))
