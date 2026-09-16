@@ -28,11 +28,10 @@ class EstoqueTest:
                            routing_key="estoque.indisponivel")
 
         self.publish("pedido.criado", 1,"Suco de Laranja")
-        self.publish("pedido.criado", 2,"Suco de Laranja")
         self.publish("pedido.criado", 1,"Suco de Laranja")
-        self.publish("pedido.excluido", 2,"Suco de Laranja")
-        self.publish("pedido.", 4, "Vodka")
-        self.publish("pedido.excluido", 5, "Vodka")
+        self.publish("pedido.criado", 1,"Suco de Laranja")
+        self.publish("pedido.excluido", 1,"Suco de Laranja")
+        self.publish("pedido.criado", 1, "Suco de Laranja")
 
 
         self.consume()

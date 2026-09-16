@@ -53,7 +53,7 @@ class Entrega:
 
     def publish(self, id, message):
         # Message deve possuir as informações do pedido
-        signature = self.key_manager.sign(message)
+        signature = self.key_manager.sign(str(id) + message)
         
         signed_message = {"id": id, "message": message, "signature": signature}
 

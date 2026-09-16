@@ -58,6 +58,7 @@ class Estoque:
         print(f" [x] {method.routing_key} sent a message")
 
         info = json.loads(body)
+        time.sleep(2)
 
         if self.key_manager.check_signature(str(info["id"]) + info["message"], info["signature"], "principal"):
             message = info["message"]
@@ -70,20 +71,20 @@ class Estoque:
                 print(f" [x] pedido.estoque_ok")
                 self.stock[produto] = self.stock[produto] - 1
                 self.reserved[produto] = self.reserved[produto] + 1
-                self.publish("pedido.estoque_ok", id, message)
+                self.publish("pedido.estoque_ok", info["id"], message)
             else:
                 print(f" [x] estoque.indisponivel")
-                self.publish("estoque.indisponivel", id, message)
+                self.publish("estoque.indisponivel", info["id"], message)
         else:
             print(" [x] Falsified signature, ignoring")
         
-        time.sleep(2)
 
 
     def excluido_callback(self, ch, method, properties, body):
         print(f" [x] {method.routing_key} sent a message")
 
         info = json.loads(body)
+        time.sleep(2)
 
         if self.key_manager.check_signature(str(info["id"]) + info["message"], info["signature"], "principal"):
             message = info["message"]
@@ -98,7 +99,6 @@ class Estoque:
         else:
             print(" [x] Falsified signature, ignoring")
 
-        time.sleep(2)
 
         
     def consume(self):
