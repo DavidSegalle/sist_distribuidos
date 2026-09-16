@@ -27,10 +27,11 @@ class EstoqueTest:
         self.channel.queue_bind(exchange='ecommerce', queue=self.estoque_indisponivel_queue,
                            routing_key="estoque.indisponivel")
 
-        self.publish("pedido.criado", 1,"Feijoada")
-        self.publish("pedido.excluido", 2,"Feijoada")
-        self.publish("pedido.criado", 3,"Feijoada")
-        self.publish("pedido.excluido", 4, "Vodka")
+        self.publish("pedido.criado", 1,"Suco de Laranja")
+        self.publish("pedido.criado", 2,"Suco de Laranja")
+        self.publish("pedido.criado", 1,"Suco de Laranja")
+        self.publish("pedido.excluido", 2,"Suco de Laranja")
+        self.publish("pedido.", 4, "Vodka")
         self.publish("pedido.excluido", 5, "Vodka")
 
 
