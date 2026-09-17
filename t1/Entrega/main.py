@@ -37,6 +37,8 @@ class Entrega:
     def callback(self,ch, method, properties, body):
         print(f" [x] {method.routing_key} sent a message")
 
+        time.sleep(2)
+
         info = json.loads(body)
         signed_info = str(info["id"]) + info["message"]
         if self.key_manager.check_signature(signed_info, info["signature"], "pagamento"):
