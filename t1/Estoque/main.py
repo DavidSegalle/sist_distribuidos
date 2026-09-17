@@ -55,17 +55,19 @@ class Estoque:
         self.consume()
 
     def criado_callback(self, ch, method, properties, body):
-        print(f" [x] {method.routing_key} sent a message")
-
         info = json.loads(body)
         time.sleep(2)
 
         if self.key_manager.check_signature(str(info["id"]) + info["message"], info["signature"], "principal"):
             message = info["message"]
             id = str(info["id"])
-            print(f" [x] The message is real ({id}): {message}")
+            print(f" [x] The message is real, checking for stock")
 
             produto = message
+
+            if produto not in self.stock.keys():
+                print(" [x] The requested product does not exist, ignoring")
+                return
 
             if (self.stock[produto] - 1 >= 0):
                 print(f" [x] pedido.estoque_ok")
@@ -75,6 +77,9 @@ class Estoque:
             else:
                 print(f" [x] estoque.indisponivel")
                 self.publish("estoque.indisponivel", info["id"], message)
+
+            print(f" [x] {produto} now has {self.stock[produto]} units in stock and {self.reserved[produto]} in reserve")
+
         else:
             print(" [x] Falsified signature, ignoring")
         
@@ -89,13 +94,15 @@ class Estoque:
         if self.key_manager.check_signature(str(info["id"]) + info["message"], info["signature"], "principal"):
             message = info["message"]
             id = str(info["id"])
-            print(f" [x] The message is real ({id}): {message}")
+            print(f" [x] The message is real, removing product from reserves")
             
             produto = message
 
             if (self.reserved[produto] > 0):
                 self.reserved[produto] = self.reserved[produto] - 1
                 self.stock[produto] = self.stock[produto] + 1
+            print(f" [x] {produto} now has {self.stock[produto]} units in stock and {self.reserved[produto]} in reserve")
+            
         else:
             print(" [x] Falsified signature, ignoring")
 

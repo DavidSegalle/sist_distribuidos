@@ -23,11 +23,11 @@ class Actions():
 
 class Status():
     requested = "requested"
-    estoque_ok = "estoque_ok"
-    indisponivel = "indisponivel"
-    aprovado = "aprovado"
-    recusado = "recusado"
-    enviado = "enviado"
+    estoque_ok = "estoque ok"
+    indisponivel = "estoque indisponivel"
+    aprovado = "Pagamento aprovado"
+    recusado = "Pagamento recusado"
+    enviado = "Produto enviado"
     excluido = "excluido"
 
 # beverages = ["Orange juice 20%% off", "Apple juice 15%% off", "Grape juice 10%% off"]
@@ -84,7 +84,6 @@ class Principal:
         self.consumer_thread.start()
 
     def estoque_ok_callback(self, ch, method, properties, body):
-        print(f" [x] {method.routing_key} sent a message")
 
         info = json.loads(body)
 
@@ -94,7 +93,6 @@ class Principal:
             print(" [x] Falsified signature, ignoring")
 
     def estoque_indisponivel_callback(self, ch, method, properties, body):
-        print(f" [x] {method.routing_key} sent a message")
 
         info = json.loads(body)
 
@@ -105,7 +103,6 @@ class Principal:
             print(" [x] Falsified signature, ignoring")
 
     def pagamento_aprovado_callback(self, ch, method, properties, body):
-        print(f" [x] {method.routing_key} sent a message")
 
         info = json.loads(body)
 
@@ -115,7 +112,6 @@ class Principal:
             print(" [x] Falsified signature, ignoring")
 
     def pagamento_reprovado_callback(self, ch, method, properties, body):
-        print(f" [x] {method.routing_key} sent a message")
 
         info = json.loads(body)
 
@@ -126,7 +122,6 @@ class Principal:
             print(" [x] Falsified signature, ignoring")
 
     def pedido_enviado_callback(self, ch, method, properties, body):
-        print(f" [x] {method.routing_key} sent a message")
 
         info = json.loads(body)
 
