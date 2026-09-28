@@ -4,4 +4,7 @@ services:
     ports:
       - "5672:5672"
       - "15672:15672"
-docker rm -v $(docker ps --filter status=exited -q)
+  gateway:
+    build: {context: ., args: { SERVICE: gateway }}
+    ports:
+      - "8000:8000"
