@@ -1,24 +1,51 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
+# Add CORS middleware to allow your Vue frontend to communicate with the backend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # In production, restrict this to your Vue URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-@app.get("/")
-def read_root():
-    return {"Hello": "World"}
+all_ids = []
+active_payments = {}
+accepted_payments = {}
+rejected_payments = {}
 
-@app.get("/produtos")
-async def listar_produtos():
-    return {"Produtos": "Vazio"}
+@app.post("/payment/{id}")
+def generate_payment_link(id: int): # Added type hint
+    if id in all_ids:
+        raise HTTPException(status_code=400, detail="Id already in payment list")
+         
+    all_ids.append(id)
+    active_payments[id] = "Pending"
 
-@app.post("/pedidos")
-async def criar_pedido(pedido: str):
-    return {"ok": pedido}
+    return {"URL": f"/perform_payment/{id}"}
 
-@app.post("/interesses")
-async def criar_interesse(interesse: str):
-    return {"ok": interesse,}
+@app.patch("/perform_payment/{id}/{performed}")
+def perform_payment(id: int, performed: str): # Added type hints
+    if id not in active_payments:
+        raise HTTPException(status_code=404, detail="Item not found")
+    
+    del active_payments[id]
+    
+    if performed == "paid":
+        accepted_payments[id] = "paid"
+    else:
+        rejected_payments[id] = "Not Approved"
+        
+    # Added a return statement so it returns valid JSON
+    return {"status": "success", "id": id, "action": performed}
 
-@app.delete("/interesses")
-async def cancelar_interesse(interesse: str):
-    return {"ok": True}
+@app.get("/get_active")
+def get_active():
+    return {
+        "active": active_payments,
+        "accepted": accepted_payments,
+        "rejected": rejected_payments
+    }
