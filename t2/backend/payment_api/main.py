@@ -1,6 +1,8 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+import requests
+
 app = FastAPI()
 
 # Add CORS middleware to allow your Vue frontend to communicate with the backend
@@ -25,7 +27,7 @@ def generate_payment_link(id: int): # Added type hint
     all_ids.append(id)
     active_payments[id] = "Pending"
 
-    return {"URL": f"/perform_payment/{id}"}
+    return {"url": f"/perform_payment/{id}"}
 
 @app.patch("/perform_payment/{id}/{performed}")
 def perform_payment(id: int, performed: str): # Added type hints
@@ -38,7 +40,14 @@ def perform_payment(id: int, performed: str): # Added type hints
         accepted_payments[id] = "paid"
     else:
         rejected_payments[id] = "Not Approved"
-        
+
+
+    api_url = f"http://localhost:8002/payment/{id}/{performed}"
+    response = requests.patch(api_url)
+    
+    print(response)
+    
+    
     # Added a return statement so it returns valid JSON
     return {"status": "success", "id": id, "action": performed}
 
