@@ -28,41 +28,57 @@ async def lifespan(app: FastAPI):
         target=pagamento_object.consume,
         daemon=True
     )
-
     rabbitmq_thread.start()
 
     yield
 
-    pagamento_object.stop()
+    # Se pá tem que fazer um stop
+    #pagamento_object.stop()
 
     rabbitmq_thread.join(timeout=5)
 
 
-app = FastAPI()#lifespan=lifespan)
+app = FastAPI(lifespan=lifespan)
 
 all_payments = []
 
+global_key_manager = KeyManager("pagamento")
+
+global_connection = pika.BlockingConnection(
+pika.ConnectionParameters(host='localhost'))
+global_channel = global_connection.channel()
+
+def publish(key, id, message):
+    # Message deve possuir as informações do pedido
+    signature = global_key_manager.sign(str(id) + message)
+    
+    signed_message = {"id": id, "message": message, "signature": signature}
+
+    global_channel.basic_publish(
+    exchange='ecommerce', routing_key=key, body=json.dumps(signed_message))
+
 @app.patch("/payment/{id}/{status}")
 def generate_payment_link(id: int, status: str): # Added type hint
-
     exists = False
     for payment in all_payments:
-        if payment["id"] == id and payment["status"] == "pending":
+        
+        if payment["id"] == str(id) and payment["status"] == "pending":
             payment["status"] = status
             exists = True
             break
-    
+
     if not exists:
         raise HTTPException(status_code=400, detail="Id already in payment list")
 
     print(status)
+    print(payment)
     if status == "paid":
         print(" [x] Payment was accepted, sending to: pagamento.aprovado")
-        pagamento_object.publish("pagamento.aprovado", payment["id"], payment["message"])
+        publish("pagamento.aprovado", str(id), payment["message"])
     else:
         print(" [x] Payment failed, sending to: pagamento.reprovado")
-        pagamento_object.publish("pagamento.reprovado", payment["id"], payment["message"])
-        
+        publish("pagamento.reprovado", str(id), payment["message"])
+
     return
 
 class Pagamento:
@@ -84,9 +100,6 @@ class Pagamento:
 
         random.seed(time.time())
 
-        
-
-
     def callback(self,ch, method, properties, body):
         print(f" [x] {method.routing_key} sent a message")
 
@@ -99,7 +112,7 @@ class Pagamento:
         global all_payments
         info ["status"] = "pending"
         all_payments.append(info) 
-
+        print(all_payments)
         # Request the payment backend api to generate a URL
         api_url = f"http://localhost:8001/payment/{str(info["id"])}"
         response = requests.post(api_url)
@@ -108,7 +121,7 @@ class Pagamento:
 
         # Envia a url (principal deve consumir e disponibilizar no frontend para que o frontend faça request dessa url)
         self.publish("pagamento.url", str(info["id"]), url["url"])
-    
+
     def consume(self):
         self.channel.basic_consume(
         queue=self.consumer_queue, on_message_callback=self.callback, auto_ack=True)
@@ -123,3 +136,5 @@ class Pagamento:
 
         self.channel.basic_publish(
         exchange='ecommerce', routing_key=key, body=json.dumps(signed_message))
+
+    

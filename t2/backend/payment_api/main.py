@@ -37,7 +37,7 @@ def perform_payment(id: int, performed: str): # Added type hints
     del active_payments[id]
     
     if performed == "paid":
-        accepted_payments[id] = "paid"
+        accepted_payments[id] = "Approved"
     else:
         rejected_payments[id] = "Not Approved"
 
@@ -46,7 +46,6 @@ def perform_payment(id: int, performed: str): # Added type hints
     response = requests.patch(api_url)
     
     print(response)
-    
     
     # Added a return statement so it returns valid JSON
     return {"status": "success", "id": id, "action": performed}
