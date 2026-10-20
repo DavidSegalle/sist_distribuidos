@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <title>Mock de Pagamento</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; margin-top: 4rem; }
+    button { padding: 0.7rem 1.5rem; margin: 0.5rem; font-size: 1rem; color: white; border: none; border-radius: 6px; cursor: pointer; }
+    #aprovar { background: #2e7d32; }
+    #recusar { background: #c62828; }
+  </style>
+</head>
+<body>
+  <h1>Pagamento do pedido #{id}</h1>
+  <div id="botoes">
+    <button id="aprovar" onclick="pagar('paid')">Pagamento Aprovado</button>
+    <button id="recusar" onclick="pagar('rejected')">Pagamento Recusado</button>
+  </div>
+  <p id="resultado"></p>
+  <script>
+    async function pagar(acao) {
+      document.getElementById('botoes').hidden = true
+      const resposta = await fetch('/perform_payment/{id}/' + acao, { method: 'PATCH' })
+      const resultado = document.getElementById('resultado')
+      if (resposta.ok) {
+        resultado.textContent = acao === 'paid' ? 'Pagamento aprovado! Pode fechar esta aba.' : 'Pagamento recusado. Pode fechar esta aba.'
+      } else {
+        resultado.textContent = 'Erro: ' + (await resposta.json()).detail
+      }
+    }
+  </script>
+</body>
+</html>

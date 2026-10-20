@@ -1,5 +1,8 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
+
+from pathlib import Path
 
 import requests
 
@@ -14,6 +17,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+PAYMENT_API_URL = "http://localhost:8001"
+
+CHECKOUT_PAGE = (Path(__file__).parent / "checkout.html").read_text(encoding="utf-8")
+
 all_ids = []
 active_payments = {}
 accepted_payments = {}
@@ -27,7 +34,13 @@ def generate_payment_link(id: int): # Added type hint
     all_ids.append(id)
     active_payments[id] = "Pending"
 
-    return {"url": f"/perform_payment/{id}"}
+    return {"url": f"{PAYMENT_API_URL}/perform_payment/{id}"}
+
+@app.get("/perform_payment/{id}", response_class=HTMLResponse)
+def checkout_page(id: int):
+    if id not in active_payments:
+        return HTMLResponse("<h1>Pagamento não encontrado ou já processado</h1>", status_code=404)
+    return CHECKOUT_PAGE.replace("{id}", str(id))
 
 @app.patch("/perform_payment/{id}/{performed}")
 def perform_payment(id: int, performed: str): # Added type hints

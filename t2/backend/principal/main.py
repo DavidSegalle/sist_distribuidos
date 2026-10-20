@@ -25,8 +25,6 @@ PRODUCTS = [
 
 CATEGORIAS = ["A", "B", "C"]
 
-ACTIVE_PAYMENT_URLS = []
-
 class Status():
     requested = "Pedido criado"
     estoque_ok = "Estoque confirmado"
@@ -125,8 +123,7 @@ class Principal:
         )
         info = self.verify(body, "pagamento")
         if info:
-            ACTIVE_PAYMENT_URLS.append(info["message"])
-            print(ACTIVE_PAYMENT_URLS)
+            self.update_pedido(info["id"], url_pagamento=info["message"])
 
     def pagamento_aprovado_callback(self, ch, method, properties, body):
         info = self.verify(body, "pagamento")
@@ -301,6 +298,13 @@ async def criar_interesse(interesse: InteresseRequest):
         raise HTTPException(status_code=400, detail=f"Categorias inválidas: {categorias_invalidas}")
 
     message = json.dumps({"acao": "registrar", "email": interesse.email,
+                          "categorias": interesse.categorias})
+    principal.publish("interesse.promocao", interesse.email, message)
+    return {"ok": True}
+
+@app.delete("/interesses")
+async def cancelar_interesse(interesse: InteresseRequest):
+    message = json.dumps({"acao": "cancelar", "email": interesse.email,
                           "categorias": interesse.categorias})
     principal.publish("interesse.promocao", interesse.email, message)
     return {"ok": True}
