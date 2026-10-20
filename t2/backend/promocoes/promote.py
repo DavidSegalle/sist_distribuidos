@@ -67,7 +67,7 @@ def worker():
     print(f"Waiting {sl_time} seconds until making a new advert")
     time.sleep(sl_time)
     message, category = ad_maker()
-    print(f"Sending category {category} with ad: {message} to: {registered_emails}")
+    print(f"Sending category {category} with ad: {message} to: {registered_emails[category]}")
     for email in registered_emails[category]:
         r = resend.Emails.send({
             "from": "onboarding@resend.dev",
@@ -108,9 +108,14 @@ class Promote:
         info = json.loads(body)
         signed_info = str(info["id"]) + info["message"]
         if self.key_manager.check_signature(signed_info, info["signature"], "principal"):
+            
+            message_json = json.loads(info["message"])
             print(f" [x] The message is real, registering email")
             global registered_emails
-            registered_emails.append(info["message"])
+            
+            for cat in message_json["categorias"]:
+                if cat in registered_emails:
+                    registered_emails[cat].append(message_json["email"])
 
     def consume(self):
         self.channel.basic_consume(

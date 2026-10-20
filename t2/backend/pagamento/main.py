@@ -47,20 +47,35 @@ pika.ConnectionParameters(host='localhost'))
 global_channel = global_connection.channel()
 
 def publish(key, id, message):
+    print(f"Publishing in {key} the message: {message}")
     # Message deve possuir as informações do pedido
     signature = global_key_manager.sign(str(id) + message)
     
     signed_message = {"id": id, "message": message, "signature": signature}
 
-    global_channel.basic_publish(
-    exchange='ecommerce', routing_key=key, body=json.dumps(signed_message))
+    connection = pika.BlockingConnection(
+        pika.ConnectionParameters(host="localhost")
+    )
+
+    channel = connection.channel()
+    channel.exchange_declare(
+        exchange="ecommerce",
+        exchange_type="direct",
+    )
+
+    channel.basic_publish(
+        exchange="ecommerce",
+        routing_key=key,
+        body=json.dumps(signed_message),
+    )
+    connection.close()
 
 @app.patch("/payment/{id}/{status}")
 def generate_payment_link(id: int, status: str): # Added type hint
     exists = False
     for payment in all_payments:
         
-        if payment["id"] == str(id) and payment["status"] == "pending":
+        if str(payment["id"]) == str(id) and payment["status"] == "pending":
             payment["status"] = status
             exists = True
             break
@@ -109,7 +124,7 @@ class Pagamento:
         all_payments.append(info) 
         print(all_payments)
         # Request the payment backend api to generate a URL
-        api_url = f"http://localhost:8001/payment/{str(info["id"])}"
+        api_url = f"http://localhost:8001/payment/{info['id']}"
         response = requests.post(api_url)
         
         url = response.json()

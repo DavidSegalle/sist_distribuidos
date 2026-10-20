@@ -27,3 +27,17 @@ Para rodar backend de estoque:
 cd backend
 python3 -m uvicorn estoque.main:app --port 8003
 ```
+
+Para rodar backend principal:
+
+```bash
+cd backend
+python3 -m uvicorn principal.main:app --port 8000
+```
+
+Para rodar backend entrega:
+
+```bash
+cd backend
+python3 -m entrega.main
+```
