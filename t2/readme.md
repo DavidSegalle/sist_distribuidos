@@ -13,7 +13,7 @@ npm run dev
 Para rodar backend de pagamentos:
 
 ```bash
-t2/backend/payment_api$ fastapi run main.py --port 8001
+python3 -m uvicorn payment_api.main:app --reload --port 8001
 ```
 
 ```bash

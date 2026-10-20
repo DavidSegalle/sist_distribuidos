@@ -15,9 +15,6 @@ import threading
 
 from key_manager.generate_keys import KeyManager
 
-pagamento_object = None
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global pagamento_object, rabbitmq_thread
@@ -37,6 +34,7 @@ async def lifespan(app: FastAPI):
 
     rabbitmq_thread.join(timeout=5)
 
+pagamento_object = None
 
 app = FastAPI(lifespan=lifespan)
 
@@ -70,8 +68,6 @@ def generate_payment_link(id: int, status: str): # Added type hint
     if not exists:
         raise HTTPException(status_code=400, detail="Id already in payment list")
 
-    print(status)
-    print(payment)
     if status == "paid":
         print(" [x] Payment was accepted, sending to: pagamento.aprovado")
         publish("pagamento.aprovado", str(id), payment["message"])
@@ -120,21 +116,10 @@ class Pagamento:
         url = response.json()
 
         # Envia a url (principal deve consumir e disponibilizar no frontend para que o frontend faça request dessa url)
-        self.publish("pagamento.url", str(info["id"]), url["url"])
+        publish("pagamento.url", str(info["id"]), url["url"])
 
     def consume(self):
         self.channel.basic_consume(
         queue=self.consumer_queue, on_message_callback=self.callback, auto_ack=True)
         print("Started consuming")
         self.channel.start_consuming()
-
-    def publish(self, key, id, message):
-        # Message deve possuir as informações do pedido
-        signature = self.key_manager.sign(str(id) + message)
-        
-        signed_message = {"id": id, "message": message, "signature": signature}
-
-        self.channel.basic_publish(
-        exchange='ecommerce', routing_key=key, body=json.dumps(signed_message))
-
-    
