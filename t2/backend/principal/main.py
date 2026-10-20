@@ -25,8 +25,6 @@ PRODUCTS = [
 
 CATEGORIAS = ["A", "B", "C"]
 
-ACTIVE_PAYMENT_URLS = []
-
 class Status():
     requested = "Pedido criado"
     estoque_ok = "Estoque confirmado"
@@ -125,8 +123,7 @@ class Principal:
         )
         info = self.verify(body, "pagamento")
         if info:
-            ACTIVE_PAYMENT_URLS.append(info["message"])
-            print(ACTIVE_PAYMENT_URLS)
+            self.update_pedido(info["id"], url_pagamento=info["message"])
 
     def pagamento_aprovado_callback(self, ch, method, properties, body):
         info = self.verify(body, "pagamento")
@@ -304,7 +301,3 @@ async def criar_interesse(interesse: InteresseRequest):
                           "categorias": interesse.categorias})
     principal.publish("interesse.promocao", interesse.email, message)
     return {"ok": True}
-
-@app.get("/active_payments")
-async def list_active_payments():
-    return ACTIVE_PAYMENT_URLS

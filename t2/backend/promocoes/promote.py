@@ -61,20 +61,23 @@ def worker():
 
         return message, category
     
-    time.sleep(60)
+    while True:
+        time.sleep(60)
 
-    sl_time = random.randint(3, 7)
-    print(f"Waiting {sl_time} seconds until making a new advert")
-    time.sleep(sl_time)
-    message, category = ad_maker()
-    print(f"Sending category {category} with ad: {message} to: {registered_emails[category]}")
-    for email in registered_emails[category]:
-        r = resend.Emails.send({
-            "from": "onboarding@resend.dev",
-            "to": email,
-            "subject": f"New add, category: {category}",
-            "html": f"The ad is for: {message}"
-        })
+        sl_time = random.randint(3, 7)
+        print(f"Waiting {sl_time} seconds until making a new advert")
+        time.sleep(sl_time)
+        message, category = ad_maker()
+        
+        emails = list(registered_emails[category])
+        print(f"Sending category {category} with ad: {message} to: {emails}")
+        for email in emails:
+            r = resend.Emails.send({
+                "from": "onboarding@resend.dev",
+                "to": email,
+                "subject": f"New add, category: {category}",
+                "html": f"The ad is for: {message}"
+            })
 
 t = threading.Thread(target=worker, daemon=True) # Daemon pra matar com control c
 t.start()
@@ -110,12 +113,19 @@ class Promote:
         if self.key_manager.check_signature(signed_info, info["signature"], "principal"):
             
             message_json = json.loads(info["message"])
-            print(f" [x] The message is real, registering email")
+            email = message_json["email"]
             global registered_emails
-            
-            for cat in message_json["categorias"]:
-                if cat in registered_emails:
-                    registered_emails[cat].append(message_json["email"])
+
+            if message_json.get("acao") == "cancelar":
+                print(f" [x] The message is real, removing email")
+                for cat in message_json["categorias"]:
+                    if email in registered_emails.get(cat, []):
+                        registered_emails[cat].remove(email)
+            else:
+                print(f" [x] The message is real, registering email")
+                for cat in message_json["categorias"]:
+                    if cat in registered_emails and email not in registered_emails[cat]:
+                        registered_emails[cat].append(email)
 
     def consume(self):
         self.channel.basic_consume(
