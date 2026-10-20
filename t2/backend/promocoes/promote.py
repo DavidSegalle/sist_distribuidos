@@ -7,13 +7,6 @@ load_dotenv()
 
 resend.api_key = os.environ["RESEND_API_KEY"]
 
-r = resend.Emails.send({
-  "from": "onboarding@resend.dev",
-  "to": "davidsegalle@alunos.utfpr.edu.br",
-  "subject": "NOVA PROMOÇÃO, APAGAR DEPOIS AAA",
-  "html": "<p>Congrats on sending your <strong>first email</strong>!</p>"
-})
-
 registered_emails = []
 
 #!/usr/bin/env python
@@ -40,7 +33,7 @@ import time
 import random
 
 def worker():
-    def ad_maker(self):
+    def ad_maker():
         categories = ["A", "B", "C"]
         cat = random.randint(0, 2)
         category = categories[cat]
@@ -72,7 +65,7 @@ def worker():
     print(f"Waiting {sl_time} seconds until making a new advert")
     time.sleep(sl_time)
     message, category = ad_maker()
-
+    print(f"Sending category {category} with ad: {message} to: {registered_emails}")
     for email in registered_emails:
         r = resend.Emails.send({
             "from": "onboarding@resend.dev",
