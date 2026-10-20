@@ -40,7 +40,7 @@ class Estoque:
             "Vodka": 0,
         }
 
-        self.db = sqlite3.connect(DB_PATH)
+        self.db = sqlite3.connect(DB_PATH, check_same_thread=False)
         self.db.execute("CREATE TABLE IF NOT EXISTS estoque (produto TEXT PRIMARY KEY, stock INTEGER, reserved INTEGER)")
         self.db.executemany("INSERT OR IGNORE INTO estoque VALUES (?, ?, ?)",
                             [(p, self.stock[p], self.reserved[p]) for p in self.stock])
