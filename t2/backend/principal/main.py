@@ -304,3 +304,7 @@ async def criar_interesse(interesse: InteresseRequest):
                           "categorias": interesse.categorias})
     principal.publish("interesse.promocao", interesse.email, message)
     return {"ok": True}
+
+@app.get("/active_payments")
+async def list_active_payments():
+    return ACTIVE_PAYMENT_URLS

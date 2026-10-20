@@ -41,3 +41,10 @@ Para rodar backend entrega:
 cd backend
 python3 -m entrega.main
 ```
+
+Para rodar backend promocoes:
+
+```bash
+cd backend
+python3 -m promocoes.promote
+```
