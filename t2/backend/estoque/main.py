@@ -4,8 +4,14 @@ import sys
 import json
 import time
 import sqlite3
+import threading
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
 
 from key_manager.generate_keys import KeyManager
+
+DB_PATH = "estoque.db"
 
 class Estoque:
     def __init__(self):
@@ -34,7 +40,7 @@ class Estoque:
             "Vodka": 0,
         }
 
-        self.db = sqlite3.connect("estoque.db")
+        self.db = sqlite3.connect(DB_PATH)
         self.db.execute("CREATE TABLE IF NOT EXISTS estoque (produto TEXT PRIMARY KEY, stock INTEGER, reserved INTEGER)")
         self.db.executemany("INSERT OR IGNORE INTO estoque VALUES (?, ?, ?)",
                             [(p, self.stock[p], self.reserved[p]) for p in self.stock])
@@ -62,8 +68,6 @@ class Estoque:
                    routing_key="pedido.criado")
         self.channel.queue_bind(exchange='ecommerce', queue=self.excluido_queue,
                    routing_key="pedido.excluido")
-
-        self.consume()
 
     def criado_callback(self, ch, method, properties, body):
         info = json.loads(body)
@@ -110,6 +114,10 @@ class Estoque:
             
             produto = message
 
+            if produto not in self.stock.keys():
+                print(" [x] The requested product does not exist, ignoring")
+                return
+
             if (self.reserved[produto] > 0):
                 self.reserved[produto] = self.reserved[produto] - 1
                 self.stock[produto] = self.stock[produto] + 1
@@ -142,5 +150,36 @@ class Estoque:
         self.channel.basic_publish(
         exchange='ecommerce', routing_key=key, body=json.dumps(signed_message))
 
-if __name__ == "__main__":
-    e = Estoque()
+    def produtos_disponiveis(self):
+        db = sqlite3.connect(DB_PATH)
+        try:
+            rows = db.execute("SELECT produto, stock FROM estoque WHERE stock > 0").fetchall()
+        finally:
+            db.close()
+        return [{"produto": produto, "quantidade": stock} for produto, stock in rows]
+
+
+estoque_object = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global estoque_object
+
+    estoque_object = Estoque()
+
+    rabbitmq_thread = threading.Thread(
+        target=estoque_object.consume,
+        daemon=True
+    )
+    rabbitmq_thread.start()
+
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
+
+
+@app.get("/produtos")
+def listar_produtos():
+    return estoque_object.produtos_disponiveis()
