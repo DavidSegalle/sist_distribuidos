@@ -80,8 +80,6 @@ def generate_payment_link(id: int, status: str): # Added type hint
 class Pagamento:
     def __init__(self):
 
-        self.key_manager = KeyManager("pagamento")
-
         connection = pika.BlockingConnection(
         pika.ConnectionParameters(host='localhost'))
         self.channel = connection.channel()
@@ -102,7 +100,8 @@ class Pagamento:
         # Verifica validade
         info = json.loads(body)
         signed_info = str(info["id"]) + info["message"]
-        if not self.key_manager.check_signature(signed_info, info["signature"], "estoque"):
+        global global_key_manager
+        if not global_key_manager.check_signature(signed_info, info["signature"], "estoque"):
             return
 
         global all_payments

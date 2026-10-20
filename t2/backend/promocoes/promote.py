@@ -7,7 +7,9 @@ load_dotenv()
 
 resend.api_key = os.environ["RESEND_API_KEY"]
 
-registered_emails = []
+registered_emails = {"A": [],
+                     "B": [],
+                     "C": []}
 
 #!/usr/bin/env python
 import pika
@@ -66,7 +68,7 @@ def worker():
     time.sleep(sl_time)
     message, category = ad_maker()
     print(f"Sending category {category} with ad: {message} to: {registered_emails}")
-    for email in registered_emails:
+    for email in registered_emails[category]:
         r = resend.Emails.send({
             "from": "onboarding@resend.dev",
             "to": email,
