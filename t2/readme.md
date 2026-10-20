@@ -1,7 +1,7 @@
-Para buildar os microserviços do backend e o RabbitMQ, rode:
+Para rodar o RabbitMQ:
 
 ``` cd backend ```
-``` docker-compose up --build ```
+``` docker-compose up -d ```
 
 Para rodar o frontend:
 
@@ -19,4 +19,11 @@ python3 -m uvicorn payment_api.main:app --reload --port 8001
 ```bash
 cd backend
 python3 -m uvicorn pagamento.main:app --reload --port 8002
+```
+
+Para rodar backend de estoque:
+
+```bash
+cd backend
+python3 -m uvicorn estoque.main:app --port 8003
 ```

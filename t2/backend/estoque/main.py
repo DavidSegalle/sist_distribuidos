@@ -1,0 +1,185 @@
+#!/usr/bin/env python
+import pika
+import sys
+import json
+import time
+import sqlite3
+import threading
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+
+from key_manager.generate_keys import KeyManager
+
+DB_PATH = "estoque.db"
+
+class Estoque:
+    def __init__(self):
+
+        self.stock = {
+            "Suco de Laranja": 2,
+            "Suco de Maçã": 4,
+            "Suco de Uva": 5,
+            "Arayes": 3,
+            "Feijoada": 4,
+            "Oniguiri": 1,
+            "Lamen": 3,
+            "Rum": 2,
+            "Vodka": 1,
+        }
+
+        self.reserved = {
+            "Suco de Laranja": 0,
+            "Suco de Maçã": 0,
+            "Suco de Uva": 0,
+            "Arayes": 0,
+            "Feijoada": 0,
+            "Oniguiri": 0,
+            "Lamen": 0,
+            "Rum": 0,
+            "Vodka": 0,
+        }
+
+        self.db = sqlite3.connect(DB_PATH)
+        self.db.execute("CREATE TABLE IF NOT EXISTS estoque (produto TEXT PRIMARY KEY, stock INTEGER, reserved INTEGER)")
+        self.db.executemany("INSERT OR IGNORE INTO estoque VALUES (?, ?, ?)",
+                            [(p, self.stock[p], self.reserved[p]) for p in self.stock])
+        self.db.commit()
+
+        for produto, stock, reserved in self.db.execute("SELECT produto, stock, reserved FROM estoque"):
+            self.stock[produto] = stock
+            self.reserved[produto] = reserved
+
+        self.key_manager = KeyManager("estoque")
+
+        connection = pika.BlockingConnection(
+        pika.ConnectionParameters(host='localhost'))
+        self.channel = connection.channel()
+
+        self.channel.exchange_declare(exchange='ecommerce', exchange_type='direct')
+
+        criado = self.channel.queue_declare(queue='', exclusive=True)
+        self.criado_queue = criado.method.queue
+
+        excluido = self.channel.queue_declare(queue='', exclusive=True)
+        self.excluido_queue = excluido.method.queue
+
+        self.channel.queue_bind(exchange='ecommerce', queue=self.criado_queue,
+                   routing_key="pedido.criado")
+        self.channel.queue_bind(exchange='ecommerce', queue=self.excluido_queue,
+                   routing_key="pedido.excluido")
+
+    def criado_callback(self, ch, method, properties, body):
+        info = json.loads(body)
+        time.sleep(2)
+
+        if self.key_manager.check_signature(str(info["id"]) + info["message"], info["signature"], "principal"):
+            message = info["message"]
+            id = str(info["id"])
+            print(f" [x] The message is real, checking for stock")
+
+            produto = message
+
+            if produto not in self.stock.keys():
+                print(" [x] The requested product does not exist, ignoring")
+                return
+
+            if (self.stock[produto] - 1 >= 0):
+                print(f" [x] pedido.estoque_ok")
+                self.stock[produto] = self.stock[produto] - 1
+                self.reserved[produto] = self.reserved[produto] + 1
+                self.save(produto)
+                self.publish("pedido.estoque_ok", info["id"], message)
+            else:
+                print(f" [x] estoque.indisponivel")
+                self.publish("estoque.indisponivel", info["id"], message)
+
+            print(f" [x] {produto} now has {self.stock[produto]} units in stock and {self.reserved[produto]} in reserve")
+
+        else:
+            print(" [x] Falsified signature, ignoring")
+        
+
+
+    def excluido_callback(self, ch, method, properties, body):
+        print(f" [x] {method.routing_key} sent a message")
+
+        info = json.loads(body)
+        time.sleep(2)
+
+        if self.key_manager.check_signature(str(info["id"]) + info["message"], info["signature"], "principal"):
+            message = info["message"]
+            id = str(info["id"])
+            print(f" [x] The message is real, removing product from reserves")
+            
+            produto = message
+
+            if produto not in self.stock.keys():
+                print(" [x] The requested product does not exist, ignoring")
+                return
+
+            if (self.reserved[produto] > 0):
+                self.reserved[produto] = self.reserved[produto] - 1
+                self.stock[produto] = self.stock[produto] + 1
+                self.save(produto)
+            print(f" [x] {produto} now has {self.stock[produto]} units in stock and {self.reserved[produto]} in reserve")
+            
+        else:
+            print(" [x] Falsified signature, ignoring")
+
+
+        
+    def consume(self):
+        self.channel.basic_consume(
+            queue=self.criado_queue, on_message_callback=self.criado_callback, auto_ack=True)
+        self.channel.basic_consume(
+            queue=self.excluido_queue, on_message_callback=self.excluido_callback, auto_ack=True)
+        print("Started consuming")
+        self.channel.start_consuming()
+
+    def save(self, produto):
+        self.db.execute("UPDATE estoque SET stock = ?, reserved = ? WHERE produto = ?",
+                        (self.stock[produto], self.reserved[produto], produto))
+        self.db.commit()
+
+    def publish(self, key, id, message):
+        signature = self.key_manager.sign(str(id) + message)
+        
+        signed_message = {"id": id, "message": message, "signature": signature}
+
+        self.channel.basic_publish(
+        exchange='ecommerce', routing_key=key, body=json.dumps(signed_message))
+
+    def produtos_disponiveis(self):
+        db = sqlite3.connect(DB_PATH)
+        try:
+            rows = db.execute("SELECT produto, stock FROM estoque WHERE stock > 0").fetchall()
+        finally:
+            db.close()
+        return [{"produto": produto, "quantidade": stock} for produto, stock in rows]
+
+
+estoque_object = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global estoque_object
+
+    estoque_object = Estoque()
+
+    rabbitmq_thread = threading.Thread(
+        target=estoque_object.consume,
+        daemon=True
+    )
+    rabbitmq_thread.start()
+
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
+
+
+@app.get("/produtos")
+def listar_produtos():
+    return estoque_object.produtos_disponiveis()

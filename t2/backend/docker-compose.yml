@@ -4,15 +4,3 @@ services:
     ports:
       - "5672:5672"
       - "15672:15672"
-  gateway:
-    build: {context: ., args: { SERVICE: gateway }}
-    environment:
-      PORT: 8000
-    ports:
-      - "8000:8000"
-  payment:
-    build: {context: ., args: { SERVICE: payment }}
-    environment:
-      PORT: 8001
-    ports:
-      - "8001:8001"
