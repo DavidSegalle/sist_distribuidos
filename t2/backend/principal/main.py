@@ -39,21 +39,16 @@ class Principal:
 
         self.key_manager = KeyManager("principal")
 
-        # Event loop do FastAPI
         self.loop = loop
 
         self.pedidos = {}
         self.pedidos_lock = Lock()
 
-        # Fila da conexão SSE aberta (só é acessada dentro do event loop)
         self.fila_sse = None
 
-        # Conexão só de publicação: fica ociosa entre pedidos e não processa heartbeats,
-        # então o heartbeat é desligado para o RabbitMQ não fechá-la
         self.connection = pika.BlockingConnection(
             pika.ConnectionParameters(host='localhost', heartbeat=0))
         self.channel = self.connection.channel()
-        # Os endpoints e a thread consumidora publicam pelo mesmo canal
         self.publish_lock = Lock()
 
         self.channel.exchange_declare(exchange=EXCHANGE, exchange_type='direct')
@@ -135,7 +130,6 @@ class Principal:
         if info:
             pedido = self.update_pedido(info["id"], status=Status.recusado)
             if pedido:
-                # Libera a reserva feita pelo estoque
                 self.publish("pedido.excluido", pedido["id"], pedido["produto"])
 
     def pedido_enviado_callback(self, ch, method, properties, body):
@@ -174,7 +168,6 @@ class Principal:
     # SSE
 
     def notify(self, pedido):
-        # envia para a outra thread
         self.loop.call_soon_threadsafe(self.dispatch, pedido)
 
     def dispatch(self, pedido):
@@ -182,12 +175,10 @@ class Principal:
             self.fila_sse.put_nowait(pedido)
 
     def subscribe(self):
-        # Uma nova conexão (ex.: recarregar a página) substitui a anterior
         self.fila_sse = asyncio.Queue()
         return self.fila_sse
 
     def unsubscribe(self, queue):
-        # Só limpa se ainda for a conexão atual
         if self.fila_sse is queue:
             self.fila_sse = None
 
@@ -278,7 +269,6 @@ async def listar_pedidos():
 
 @app.get("/eventos", response_class=EventSourceResponse)
 async def eventos():
-    # Notifica o cliente sobre toda mudança de estado dos pedidos
     queue = principal.subscribe()
     try:
         while True:
@@ -298,6 +288,13 @@ async def criar_interesse(interesse: InteresseRequest):
         raise HTTPException(status_code=400, detail=f"Categorias inválidas: {categorias_invalidas}")
 
     message = json.dumps({"acao": "registrar", "email": interesse.email,
+                          "categorias": interesse.categorias})
+    principal.publish("interesse.promocao", interesse.email, message)
+    return {"ok": True}
+
+@app.delete("/interesses")
+async def cancelar_interesse(interesse: InteresseRequest):
+    message = json.dumps({"acao": "cancelar", "email": interesse.email,
                           "categorias": interesse.categorias})
     principal.publish("interesse.promocao", interesse.email, message)
     return {"ok": True}
