@@ -12,6 +12,10 @@ package routeguide;
 service RouteGuide {
     // Candidate president sends this message with his id for all other server nodes. Server node reply with their vote
     rpc TryBecomePresident(Id) returns (Vote) {}
+
+    rpc WriteInfo(Info) returns () {}
+
+    rpc FetchRequest() returns (Info) {}
 }
 
 message Id {
@@ -20,4 +24,8 @@ message Id {
 
 message Vote {
     bool accepted = 2;
+}
+
+message Info {
+    string message = 3; // No write info é a string da mensagem a ser gravada, no fetch request é as informações realizadas no banco de dados
 }
