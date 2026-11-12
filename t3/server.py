@@ -20,10 +20,16 @@ import grpc
 import helloworld_pb2
 import helloworld_pb2_grpc
 
+import route_guide_pb2
+import route_guide_pb2_grpc
 
-class Greeter(helloworld_pb2_grpc.GreeterServicer):
-    def SayHello(self, request, context):
-        return helloworld_pb2.HelloReply(message="Hello, %s!" % request.name)
+class RouteGuideServicer(route_guide_pb2_grpc.RouteGuideServicer):
+    def GetFeature(self, request, context):
+        feature = "nodb_lololol"
+        if feature is None:
+            return route_guide_pb2.Feature(name="", location=request)
+        else:
+            return feature
 
 
 def serve():
