@@ -52,7 +52,7 @@ class RaftClusterNode(route_guide_pb2_grpc.ClusterServiceServicer):
 
         self.role = Role.FOLLOWER
         self.leader_id: int | None = None
-        self.commit_index: int = self.db.get_last_applied()
+        self.commit_index: int = self.db.get_metadata()["last_applied"]
 
         self.election_timeout = random.uniform(ELECTION_TIMEOUT_MIN, ELECTION_TIMEOUT_MAX)
         self.last_leader_contact = time.monotonic()
@@ -65,7 +65,7 @@ class RaftClusterNode(route_guide_pb2_grpc.ClusterServiceServicer):
         self.fetch_thread = threading.Thread(target=self._pull_fetch_loop, daemon=True)
 
     def _log_status(self, msg: str) -> None:
-        term = self.db.get_current_term()
+        term = self.db.get_metadata()["current_term"]
         print(
             f"[Node {self.node_id} | Role: {self.role.value:<9} | "
             f"Term: {term} | CommitIdx: {self.commit_index} | "
@@ -78,7 +78,7 @@ class RaftClusterNode(route_guide_pb2_grpc.ClusterServiceServicer):
         self.last_leader_contact = time.monotonic()
 
     def _become_follower(self, new_term: int, leader_id: int | None = None, reason: str = "") -> None:
-        current_term = self.db.get_current_term()
+        current_term = self.db.get_metadata()["current_term"]
         role_changed = self.role != Role.FOLLOWER
         term_changed = new_term > current_term
 
@@ -99,7 +99,7 @@ class RaftClusterNode(route_guide_pb2_grpc.ClusterServiceServicer):
             if not self.running or self.role == Role.LEADER:
                 return
 
-            new_term = self.db.get_current_term() + 1
+            new_term = self.db.get_metadata()["current_term"] + 1
             # Persist incremented term and self-vote as string
             self.db.update_term_and_vote(new_term, str(self.node_id))
 
@@ -127,7 +127,7 @@ class RaftClusterNode(route_guide_pb2_grpc.ClusterServiceServicer):
                     resp = stub.RequestVote(req, timeout=RPC_TIMEOUT_SEC)
 
                 with self.lock:
-                    current_term = self.db.get_current_term()
+                    current_term = self.db.get_metadata()["current_term"]
                     if resp.term > current_term:
                         self._become_follower(resp.term, reason=f"higher term in VoteResponse from {peer_id}")
                         return
@@ -175,7 +175,7 @@ class RaftClusterNode(route_guide_pb2_grpc.ClusterServiceServicer):
                 if self.role != Role.FOLLOWER:
                     continue
                 target_id = self.leader_id
-                current_term = self.db.get_current_term()
+                current_term = self.db.get_metadata()["current_term"]
                 last_idx, last_term = self.db.get_last_log_info()
 
             if target_id is None or target_id not in self.peers:
@@ -194,7 +194,7 @@ class RaftClusterNode(route_guide_pb2_grpc.ClusterServiceServicer):
                     resp = stub.Fetch(req, timeout=RPC_TIMEOUT_SEC)
 
                 with self.lock:
-                    local_term = self.db.get_current_term()
+                    local_term = self.db.get_metadata()["current_term"]
                     if resp.term > local_term:
                         self._become_follower(
                             resp.term,
@@ -203,9 +203,50 @@ class RaftClusterNode(route_guide_pb2_grpc.ClusterServiceServicer):
                         )
                         continue
 
-                    if resp.term == local_term and resp.leader_id != 0:
+                    if resp.term < local_term or self.role != Role.FOLLOWER:
+                        continue
+
+                    if resp.leader_id != 0:
                         self.leader_id = resp.leader_id
-                        self.last_leader_contact = time.monotonic()
+                        self._reset_election_timer()
+
+                    if resp.success:
+                        if resp.entries:
+                            entries_to_save = []
+                            for entry in resp.entries:
+                                if "=" in entry.command:
+                                    key, value = entry.command.split("=", 1)
+                                else:
+                                    key, value = entry.command, entry.command
+                                entries_to_save.append(
+                                    {
+                                        "log_index": entry.index,
+                                        "term": entry.term,
+                                        "operation": "SET",
+                                        "key": key.strip(),
+                                        "value": value.strip(),
+                                    }
+                                )
+                            self.db.append_or_overwrite_entries(entries_to_save)
+                            self._log_status(
+                                f"Replicated {len(entries_to_save)} entry(ies) from Leader {self.leader_id}"
+                            )
+
+                        if resp.commit_index > self.commit_index:
+                            self.commit_index = self.db.apply_commits_up_to(
+                                resp.commit_index
+                            )
+                            self._log_status(
+                                f"Applied commits up to index {self.commit_index}"
+                            )
+                    else:
+                        # Log divergence detected by leader at last_idx: truncate and step back
+                        if last_idx > self.commit_index:
+                            deleted = self.db.truncate_log_from(last_idx)
+                            self._log_status(
+                                f"Log divergence at index {last_idx} (term {last_term}) -> "
+                                f"truncated {deleted} entry(ies)"
+                            )
             except grpc.RpcError:
                 pass
 
@@ -213,7 +254,7 @@ class RaftClusterNode(route_guide_pb2_grpc.ClusterServiceServicer):
 
     def RequestVote(self, request, context):
         with self.lock:
-            local_term = self.db.get_current_term()
+            local_term = self.db.get_metadata()["current_term"]
             if request.term > local_term:
                 self._become_follower(request.term, reason=f"higher term in RequestVote from {request.candidate_id}")
                 local_term = request.term
@@ -221,7 +262,7 @@ class RaftClusterNode(route_guide_pb2_grpc.ClusterServiceServicer):
             if request.term < local_term:
                 return route_guide_pb2.VoteResponse(term=local_term, vote_granted=False)
 
-            voted_for = self.db.get_voted_for()  # Stored as str or None
+            voted_for = self.db.get_metadata()["voted_for"]  # Stored as str or None
             cand_id_str = str(request.candidate_id)
 
             can_vote = (voted_for is None) or (voted_for == cand_id_str)
@@ -239,7 +280,7 @@ class RaftClusterNode(route_guide_pb2_grpc.ClusterServiceServicer):
 
     def Fetch(self, request, context):
         with self.lock:
-            local_term = self.db.get_current_term()
+            local_term = self.db.get_metadata()["current_term"]
             if request.term > local_term:
                 self._become_follower(
                     request.term,
@@ -257,17 +298,17 @@ class RaftClusterNode(route_guide_pb2_grpc.ClusterServiceServicer):
                 )
 
             # 1. Record heartbeat and follower's confirmed replicated index
+            # Record heartbeat
             self.follower_last_seen[request.follower_id] = time.monotonic()
-            self.follower_last_index[request.follower_id] = request.last_log_index
 
-            # 2. Check for log consistency at request.last_log_index
+            # Check for log divergence at request.last_log_index
             if request.last_log_index > 0:
-                leader_prev_entry = self.db.get_log_entry(request.last_log_index)
+                leader_entry = self.db.get_log_entry(request.last_log_index)
                 if (
-                    leader_prev_entry is None
-                    or leader_prev_entry["term"] != request.last_log_term
+                    leader_entry is None
+                    or leader_entry["term"] != request.last_log_term
                 ):
-                    # Log divergence detected: reject so follower can truncate/step back
+                    # Do NOT update follower_last_index[request.follower_id] with a divergent index
                     return route_guide_pb2.FetchResponse(
                         term=local_term,
                         success=False,
@@ -275,6 +316,9 @@ class RaftClusterNode(route_guide_pb2_grpc.ClusterServiceServicer):
                         entries=[],
                         leader_id=self.node_id,
                     )
+
+            # Only record follower_last_index once prefix consistency is confirmed
+            self.follower_last_index[request.follower_id] = request.last_log_index
 
             # 3. Advance commit_index to the highest N > self.commit_index
             #    replicated on >= QUORUM_SIZE nodes with entry["term"] == local_term
@@ -342,22 +386,47 @@ class RaftClusterNode(route_guide_pb2_grpc.ClusterServiceServicer):
                         leader_address=self.address,
                     )
 
-                term = self.db.get_current_term()
+                term = self.db.get_metadata()["current_term"]
                 if "=" in request.data:
                     key, value = request.data.split("=", 1)
                 else:
                     key, value = request.data, request.data
 
-                new_idx = self.db.append_log_entry(term=term, key=key.strip(), value=value.strip())
-                self.commit_index = self.db.apply_commits_up_to(new_idx)
-                self._log_status(f"Committed write [{key.strip()}={value.strip()}] at index {new_idx}")
+                key = key.strip()
+                value = value.strip()
+                new_idx = self.db.append_log_entry(term=term, key=key, value=value)
+                self._log_status(f"Appended [{key}={value}] at index {new_idx}, waiting for quorum...")
 
-                return route_guide_pb2.WriteResponse(
-                    success=True,
-                    message=f"Committed at index {new_idx}",
-                    leader_id=self.node_id,
-                    leader_address=self.address,
-                )
+            # Poll outside self.lock so incoming Fetch RPCs can replicate & advance commit_index
+            deadline = time.monotonic() + RPC_TIMEOUT_SEC
+            while time.monotonic() < deadline:
+                with self.lock:
+                    curr_term = self.db.get_metadata()["current_term"]
+                    if self.role != Role.LEADER or curr_term != term:
+                        return route_guide_pb2.WriteResponse(
+                            success=False,
+                            message="Lost leadership before commit",
+                            leader_id=self.leader_id or 0,
+                            leader_address=CLUSTER_NODES.get(self.leader_id, ""),
+                        )
+
+                    if self.commit_index >= new_idx:
+                        self._log_status(f"Committed write [{key}={value}] at index {new_idx}")
+                        return route_guide_pb2.WriteResponse(
+                            success=True,
+                            message=f"Committed at index {new_idx}",
+                            leader_id=self.node_id,
+                            leader_address=self.address,
+                        )
+
+                time.sleep(0.01)  # 10ms polling interval
+
+            return route_guide_pb2.WriteResponse(
+                success=False,
+                message=f"Error: Quorum timeout waiting to commit index {new_idx}",
+                leader_id=self.node_id,
+                leader_address=self.address,
+            )
         except Exception as e:
             traceback.print_exc()
             context.abort(grpc.StatusCode.INTERNAL, str(e))

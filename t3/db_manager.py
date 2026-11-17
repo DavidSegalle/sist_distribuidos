@@ -4,34 +4,18 @@ from typing import Any, Dict, List, Optional, Tuple
 
 
 class DatabaseManager:
-    """
-    Manages persistent storage for a Raft/KRaft-style Pull-based replicated node.
-    Persists:
-      1. Node state: current_term and voted_for.
-      2. Operation log: sequential log_index, term, key, value (or operation payload).
-      3. Committed state machine (final key-value store) & last_applied index.
-    """
 
     def __init__(self, db_path: str = "db.db") -> None:
         self.db_path = db_path
         self._lock = threading.RLock()
         self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
-        self._configure_pragmas()
         self._init_schema()
-
-    def _configure_pragmas(self) -> None:
-        with self._lock:
-            cursor = self.conn.cursor()
-            # WAL mode improves concurrent read/write performance and durability
-            cursor.execute("PRAGMA journal_mode=WAL;")
-            cursor.execute("PRAGMA synchronous=FULL;")
-            self.conn.commit()
 
     def _init_schema(self) -> None:
         with self._lock:
             cursor = self.conn.cursor()
-            # 1. Persistent Raft metadata (single-row table)
+
             cursor.execute(
                 """
                 CREATE TABLE IF NOT EXISTS node_metadata (
@@ -42,6 +26,7 @@ class DatabaseManager:
                 );
                 """
             )
+
             cursor.execute(
                 """
                 INSERT OR IGNORE INTO node_metadata (id, current_term, voted_for, last_applied)
@@ -49,7 +34,7 @@ class DatabaseManager:
                 """
             )
 
-            # 2. Persistent operation log (1-based indexing matching Raft conventions)
+            # Operation log
             cursor.execute(
                 """
                 CREATE TABLE IF NOT EXISTS operation_log (
@@ -62,7 +47,7 @@ class DatabaseManager:
                 """
             )
 
-            # 3. Committed state machine (final database visible to client reads)
+            ## Commited values
             cursor.execute(
                 """
                 CREATE TABLE IF NOT EXISTS state_machine (
@@ -72,10 +57,6 @@ class DatabaseManager:
                 """
             )
             self.conn.commit()
-
-    # -------------------------------------------------------------------------
-    # Node Metadata (Term & Vote) Operations
-    # -------------------------------------------------------------------------
 
     def get_metadata(self) -> Dict[str, Any]:
         """Returns current_term, voted_for, and last_applied."""
@@ -91,25 +72,7 @@ class DatabaseManager:
                 "last_applied": row["last_applied"],
             }
 
-    def get_current_term(self) -> int:
-        with self._lock:
-            return self.get_metadata()["current_term"]
-
-    def get_voted_for(self) -> Optional[str]:
-        with self._lock:
-            return self.get_metadata()["voted_for"]
-
-    def get_last_applied(self) -> int:
-        with self._lock:
-            return self.get_metadata()["last_applied"]
-
     def update_term_and_vote(self, new_term: int, voted_for: Optional[str]) -> None:
-        """
-        Atomically persists a new term and vote.
-        Used when stepping down to Follower on a higher term (voted_for=None),
-        starting an election (new_term = term + 1, voted_for=self_id),
-        or granting a vote in the current term.
-        """
         with self._lock:
             cursor = self.conn.cursor()
             cursor.execute(
@@ -123,7 +86,6 @@ class DatabaseManager:
             self.conn.commit()
 
     def set_voted_for(self, candidate_id: Optional[str]) -> None:
-        """Persists the vote granted for the current term."""
         with self._lock:
             cursor = self.conn.cursor()
             cursor.execute(
@@ -132,15 +94,7 @@ class DatabaseManager:
             )
             self.conn.commit()
 
-    # -------------------------------------------------------------------------
-    # Operation Log Operations
-    # -------------------------------------------------------------------------
-
     def get_last_log_info(self) -> Tuple[int, int]:
-        """
-        Returns (last_log_index, last_log_term).
-        Returns (0, 0) if the log is empty.
-        """
         with self._lock:
             cursor = self.conn.cursor()
             cursor.execute(
@@ -157,7 +111,6 @@ class DatabaseManager:
             return (row["log_index"], row["term"])
 
     def get_log_entry(self, log_index: int) -> Optional[Dict[str, Any]]:
-        """Fetches a single log entry by its sequential log_index."""
         with self._lock:
             cursor = self.conn.cursor()
             cursor.execute(
