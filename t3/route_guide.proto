@@ -1,31 +1,71 @@
 syntax = "proto3";
 
+package cluster;
+
 option java_multiple_files = true;
-option java_package = "io.grpc.examples.routeguide";
-option java_outer_classname = "RouteGuideProto";
-option objc_class_prefix = "RTG";
+option java_package = "br.edu.utfpr.sd.cluster";
+option java_outer_classname = "ClusterProto";
 
-package routeguide;
+service ClusterService {
+  rpc RequestVote (VoteRequest) returns (VoteResponse);
+  rpc Fetch (FetchRequest) returns (FetchResponse);
 
-
-
-service RouteGuide {
-    // Candidate president sends this message with his id for all other server nodes. Server node reply with their vote
-    rpc TryBecomePresident(Id) returns (Vote) {}
-
-    rpc WriteInfo(Info) returns () {}
-
-    rpc FetchRequest() returns (Info) {}
+  rpc Write (WriteRequest) returns (WriteResponse);
+  rpc Read (ReadRequest) returns (ReadResponse);
 }
 
-message Id {
-  int32 id = 1;
+// Representa uma entrada individual no Log
+message LogEntry {
+  int32 index = 1;
+  int32 term = 2;
+  string command = 3; // Ex: "chave=valor" ou o dado a ser gravado
 }
 
-message Vote {
-    bool accepted = 2;
+// --- Mensagens de Eleição ---
+message VoteRequest {
+  int32 term = 1;
+  int32 candidate_id = 2;
+  int32 last_log_index = 3;
+  int32 last_log_term = 4;
 }
 
-message Info {
-    string message = 3; // No write info é a string da mensagem a ser gravada, no fetch request é as informações realizadas no banco de dados
+message VoteResponse {
+  int32 term = 1;
+  bool vote_granted = 2;
+}
+
+// --- Mensagens de Replicação Pull / Heartbeat ---
+message FetchRequest {
+  int32 term = 1;
+  int32 follower_id = 2;
+  int32 last_log_index = 3;
+  int32 last_log_term = 4;
+}
+
+message FetchResponse {
+  int32 term = 1;
+  bool success = 2;          // false se o líder detectar divergência no log da réplica
+  int32 commit_index = 3;    // Índice de commit atual do líder
+  repeated LogEntry entries = 4; // Lista com os novos dados (vazia se for só heartbeat)
+  int32 leader_id = 5;       // Útil para seguidores saberem quem é o líder atual
+}
+
+// --- Mensagens do Cliente ---
+message WriteRequest {
+  string data = 1;
+}
+
+message WriteResponse {
+  bool success = 1;
+  string message = 2;        // Ex: "Comitado com sucesso" ou "Erro: Sem quórum"
+  int32 leader_id = 3;       // Preenchido se o cliente chamar um Seguidor/Candidato
+  string leader_address = 4; // Ex: "localhost:50052" para o cliente redirecionar
+}
+
+message ReadRequest {
+  string key = 1; // Opcional, caso faça busca por chave ou retorne tudo
+}
+
+message ReadResponse {
+  repeated string committed_data = 1; // Apenas dados com índice <= commit_index
 }
