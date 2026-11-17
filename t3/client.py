@@ -72,7 +72,7 @@ class ClusterClient:
         return False
 
     def read(self, node_id: int, key: str = "") -> list[str]:
-        """Reads committed data from any specific node in the cluster."""
+
         if node_id not in self.nodes:
             print(f"[ERROR] Invalid node_id {node_id}. Choose from {list(self.nodes.keys())}.")
             return []

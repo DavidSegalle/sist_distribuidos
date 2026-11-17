@@ -85,15 +85,6 @@ class DatabaseManager:
             )
             self.conn.commit()
 
-    def set_voted_for(self, candidate_id: Optional[str]) -> None:
-        with self._lock:
-            cursor = self.conn.cursor()
-            cursor.execute(
-                "UPDATE node_metadata SET voted_for = ? WHERE id = 1;",
-                (candidate_id,),
-            )
-            self.conn.commit()
-
     def get_last_log_info(self) -> Tuple[int, int]:
         with self._lock:
             cursor = self.conn.cursor()
@@ -142,46 +133,32 @@ class DatabaseManager:
             )
             return [dict(row) for row in cursor.fetchall()]
 
-    def append_log_entry(
-        self,
-        term: int,
-        key: str,
-        value: Optional[str],
-        operation: str = "SET",
-        log_index: Optional[int] = None,
-    ) -> int:
-        """
-        Appends a new entry to the persistent operation log.
-        If log_index is None, automatically assigns last_log_index + 1 (Leader behavior).
-        Returns the assigned log_index.
-        """
+    def append_log_entry(self, term: int, key: str, value: Optional[str]) -> int:
+
         with self._lock:
-            if log_index is None:
-                last_index, _ = self.get_last_log_info()
-                log_index = last_index + 1
+            last_index, _ = self.get_last_log_info()
+            log_index = last_index + 1
 
             cursor = self.conn.cursor()
             cursor.execute(
                 """
                 INSERT INTO operation_log (log_index, term, operation, key, value)
-                VALUES (?, ?, ?, ?, ?);
+                VALUES (?, ?, 'SET', ?, ?);
                 """,
-                (log_index, term, operation, key, value),
+                (log_index, term, key, value),
             )
             self.conn.commit()
             return log_index
 
     def append_or_overwrite_entries(self, entries: List[Dict[str, Any]]) -> None:
         """
-        Replicates entries received from the Leader via FetchResponse.
-        If an existing entry has the same index but a different term,
-        truncates from that conflicting index onward before inserting.
+        Replicates leader entries. If values don't match
         """
-        if not entries:
-            return
 
         with self._lock:
             cursor = self.conn.cursor()
+            
+            # For every entry received
             for entry in entries:
                 idx = entry["log_index"]
                 term = entry["term"]
@@ -191,8 +168,9 @@ class DatabaseManager:
 
                 existing = self.get_log_entry(idx)
                 if existing is not None:
+
+                    # Erases local log at conflict point
                     if existing["term"] != term:
-                        # Conflict detected: truncate local log from idx onward
                         cursor.execute(
                             "DELETE FROM operation_log WHERE log_index >= ?;",
                             (idx,),
@@ -212,12 +190,10 @@ class DatabaseManager:
 
     def truncate_log_from(self, from_index: int) -> int:
         """
-        Deletes all uncommitted log entries with log_index >= from_index.
-        Used when a follower detects log divergence with the current leader.
-        Returns the number of deleted rows.
+        If local logs diverge from leader delete them
         """
         with self._lock:
-            last_applied = self.get_last_applied()
+            last_applied = self.get_metadata()["last_applied"]
             if from_index <= last_applied:
                 raise ValueError(
                     f"Cannot truncate already committed/applied index {from_index} "
@@ -235,32 +211,17 @@ class DatabaseManager:
     def is_candidate_log_up_to_date(
         self, candidate_last_index: int, candidate_last_term: int
     ) -> bool:
-        """
-        Raft/Pull election safety check:
-        Returns True if the candidate's log is at least as up-to-date as this node's log.
-        Comparison rule:
-          1. Higher last_log_term wins.
-          2. If last_log_term is equal, higher or equal last_log_index wins.
-        """
+
         with self._lock:
             local_last_index, local_last_term = self.get_last_log_info()
             if candidate_last_term != local_last_term:
                 return candidate_last_term > local_last_term
             return candidate_last_index >= local_last_index
 
-    # -------------------------------------------------------------------------
-    # State Machine (Committed Data) & Eventual Consistency Read Operations
-    # -------------------------------------------------------------------------
-
     def apply_commits_up_to(self, commit_index: int) -> int:
-        """
-        Applies all log entries from (last_applied + 1) up to min(commit_index, last_log_index)
-        into the final committed state_machine table.
-        Uncommitted entries (> commit_index) remain invisible to client reads.
-        Returns the updated last_applied index.
-        """
+
         with self._lock:
-            last_applied = self.get_last_applied()
+            last_applied = self.get_metadata()["last_applied"]
             last_log_index, _ = self.get_last_log_info()
             target_index = min(commit_index, last_log_index)
 
@@ -305,10 +266,6 @@ class DatabaseManager:
             return target_index
 
     def read_committed(self, key: str) -> Optional[str]:
-        """
-        Reads a value from the committed state machine.
-        Guarantees uncommitted log entries are never returned.
-        """
         with self._lock:
             cursor = self.conn.cursor()
             cursor.execute("SELECT value FROM state_machine WHERE key = ?;", (key,))
@@ -316,7 +273,6 @@ class DatabaseManager:
             return row["value"] if row else None
 
     def read_all_committed(self) -> Dict[str, Optional[str]]:
-        """Returns a dictionary of all committed key-value pairs."""
         with self._lock:
             cursor = self.conn.cursor()
             cursor.execute("SELECT key, value FROM state_machine ORDER BY key ASC;")
